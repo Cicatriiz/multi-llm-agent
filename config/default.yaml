@@ -1,0 +1,333 @@
+# Multi-LLM Agent Framework Configuration
+# Latest models as of July 2025
+
+models:
+  # OpenAI Models (Latest July 2025)
+  openai:
+    o4_mini:
+      name: "o4-mini"
+      api_name: "o4-mini"
+      temperature: 0.7
+      max_tokens: 4096
+      contexts: ["reasoning", "general", "quick_reasoning"]
+      cost_per_1k_input: 0.0011
+      cost_per_1k_output: 0.0044
+      model_type: "reasoning"
+      capabilities: ["text", "reasoning"]
+      
+    o3:
+      name: "o3"
+      api_name: "o3"
+      temperature: 0.7
+      max_tokens: 8192
+      contexts: ["complex_reasoning", "advanced_analysis", "research"]
+      cost_per_1k_input: 0.015
+      cost_per_1k_output: 0.060
+      model_type: "reasoning"
+      capabilities: ["text", "reasoning", "complex_analysis"]
+      
+    o3_pro:
+      name: "o3-pro"
+      api_name: "o3-pro"
+      temperature: 0.7
+      max_tokens: 16384
+      contexts: ["high_quota_reasoning", "intensive_analysis", "premium_tasks"]
+      cost_per_1k_input: 0.030
+      cost_per_1k_output: 0.120
+      model_type: "reasoning"
+      capabilities: ["text", "reasoning", "complex_analysis", "high_quota"]
+      
+    gpt_4_1:
+      name: "gpt-4.1"
+      api_name: "gpt-4.1"
+      temperature: 0.7
+      max_tokens: 4096
+      contexts: ["coding", "technical", "software_development"]
+      cost_per_1k_input: 0.0025
+      cost_per_1k_output: 0.010
+      model_type: "coding"
+      capabilities: ["text", "code", "function_calling"]
+      
+    gpt_4_1_mini:
+      name: "gpt-4.1-mini"
+      api_name: "gpt-4.1-mini"
+      temperature: 0.7
+      max_tokens: 4096
+      contexts: ["fast_coding", "quick_tasks", "code_review"]
+      cost_per_1k_input: 0.00015
+      cost_per_1k_output: 0.0006
+      model_type: "coding"
+      capabilities: ["text", "code", "function_calling"]
+      
+    gpt_4_1_nano:
+      name: "gpt-4.1-nano"
+      api_name: "gpt-4.1-nano"
+      temperature: 0.7
+      max_tokens: 2048
+      contexts: ["mini_tasks", "light_coding", "snippets"]
+      cost_per_1k_input: 0.0001
+      cost_per_1k_output: 0.0004
+      model_type: "coding"
+      capabilities: ["text", "code"]
+
+  # Google Gemini Models (Latest July 2025)
+  google:
+    gemini_2_5_pro:
+      name: "gemini-2.5-pro"
+      api_name: "gemini-2.5-pro"
+      temperature: 0.7
+      max_tokens: 8192
+      contexts: ["general", "multimodal", "analysis", "writing"]
+      cost_per_1k_input: 0.0015
+      cost_per_1k_output: 0.006
+      model_type: "general"
+      capabilities: ["text", "vision", "multimodal", "function_calling"]
+      
+    gemini_2_5_flash:
+      name: "gemini-2.5-flash"
+      api_name: "gemini-2.5-flash"
+      temperature: 0.7
+      max_tokens: 4096
+      contexts: ["fast_response", "low_latency", "chat", "quick_analysis"]
+      cost_per_1k_input: 0.0003
+      cost_per_1k_output: 0.0012
+      model_type: "fast"
+      capabilities: ["text", "vision", "multimodal"]
+
+  # DeepSeek Models (Latest July 2025)
+  deepseek:
+    deepseek_chat:
+      name: "deepseek-chat"
+      api_name: "deepseek-chat"
+      temperature: 0.6
+      max_tokens: 4096
+      contexts: ["chat", "discussion", "general_coding"]
+      cost_per_1k_input: 0.0005
+      cost_per_1k_output: 0.0009
+      model_type: "general"
+      capabilities: ["text", "code"]
+      
+    deepseek_reasoner:
+      name: "deepseek-reasoner"
+      api_name: "deepseek-reasoner"
+      temperature: 0.6
+      max_tokens: 8192
+      contexts: ["reasoning", "detailed_analysis", "step_by_step"]
+      cost_per_1k_input: 0.0008
+      cost_per_1k_output: 0.0024
+      model_type: "reasoning"
+      capabilities: ["text", "reasoning", "code"]
+
+# Adaptive Model Selection Configuration
+selection:
+  strategy: "adaptive_ab_mcts"  # adaptive_ab_mcts, weighted_round_robin, context_priority, cost_aware
+  fallback_enabled: true
+  max_retries: 3
+  
+  # Context-specific preferences
+  context_preferences:
+    coding:
+      primary: ["gpt_4_1", "gpt_4_1_mini", "deepseek_chat"]
+      fallback: ["o4_mini", "gemini_2_5_pro"]
+      temperature_override: 0.3
+      
+    reasoning:
+      primary: ["o3", "o4_mini", "deepseek_reasoner"]
+      fallback: ["o3_pro", "gemini_2_5_pro"]
+      temperature_override: 0.5
+      
+    analysis:
+      primary: ["o3", "gemini_2_5_pro", "deepseek_reasoner"]
+      fallback: ["o4_mini", "gpt_4_1"]
+      temperature_override: 0.7
+      
+    chat:
+      primary: ["gemini_2_5_flash", "gpt_4_1_nano", "deepseek_chat"]
+      fallback: ["o4_mini", "gpt_4_1_mini"]
+      temperature_override: 0.8
+      
+    creative:
+      primary: ["gemini_2_5_pro", "o3", "gpt_4_1"]
+      fallback: ["o4_mini", "deepseek_chat"]
+      temperature_override: 0.9
+      
+    multimodal:
+      primary: ["gemini_2_5_pro", "gemini_2_5_flash"]
+      fallback: ["gpt_4_1", "o4_mini"]
+      temperature_override: 0.7
+
+# Agent Configuration
+agents:
+  default_agent:
+    name: "MultiLLMAgent"
+    description: "General-purpose multi-LLM agent"
+    capabilities: ["text", "code", "analysis", "reasoning"]
+    tools: ["web_search", "code_execution", "file_operations"]
+    memory_type: "conversation"
+    max_memory_items: 100
+    
+  specialist_agents:
+    coder:
+      name: "CodeAgent"
+      description: "Specialized coding agent"
+      preferred_models: ["gpt_4_1", "gpt_4_1_mini", "deepseek_chat"]
+      capabilities: ["code", "debugging", "architecture"]
+      tools: ["code_execution", "git_operations", "package_management"]
+      
+    analyst:
+      name: "AnalystAgent"
+      description: "Data analysis and research agent"
+      preferred_models: ["o3", "gemini_2_5_pro", "deepseek_reasoner"]
+      capabilities: ["analysis", "research", "data_processing"]
+      tools: ["web_search", "data_analysis", "visualization"]
+      
+    reasoner:
+      name: "ReasoningAgent"
+      description: "Complex reasoning and problem-solving agent"
+      preferred_models: ["o3", "o3_pro", "o4_mini"]
+      capabilities: ["reasoning", "problem_solving", "logic"]
+      tools: ["math_solver", "logic_checker", "proof_assistant"]
+
+# AB-MCTS Configuration (inspired by the research)
+ab_mcts:
+  enabled: true
+  max_iterations: 25
+  exploration_constant: 1.4
+  selection_temperature: 0.1
+  
+  # Multi-model combinations that work well together
+  model_combinations:
+    high_performance:
+      models: ["o4_mini", "gemini_2_5_pro", "deepseek_reasoner"]
+      use_case: "Complex problem solving"
+      
+    cost_effective:
+      models: ["o4_mini", "gemini_2_5_flash", "deepseek_chat"]
+      use_case: "General tasks with cost optimization"
+      
+    coding_focused:
+      models: ["gpt_4_1", "gpt_4_1_mini", "deepseek_chat"]
+      use_case: "Software development tasks"
+      
+    reasoning_heavy:
+      models: ["o3", "o4_mini", "deepseek_reasoner"]
+      use_case: "Complex reasoning and analysis"
+
+# Metrics and Monitoring
+metrics:
+  enabled: true
+  track_costs: true
+  track_performance: true
+  track_quality: true
+  
+  cost_limits:
+    daily_limit: 200.0  # USD
+    per_request_limit: 20.0
+    model_limits:
+      o3_pro: 100.0
+      o3: 60.0
+      o4_mini: 30.0
+      
+  performance_targets:
+    response_time: 30.0  # seconds
+    success_rate: 0.95
+    
+  quality_metrics:
+    - "coherence"
+    - "relevance"
+    - "completeness"
+    - "accuracy"
+
+# Tools Configuration
+tools:
+  web_search:
+    enabled: true
+    provider: "tavily"  # or "serper", "bing"
+    max_results: 5
+    
+  code_execution:
+    enabled: true
+    sandbox: "docker"
+    timeout: 60
+    allowed_languages: ["python", "javascript", "bash"]
+    
+  file_operations:
+    enabled: true
+    base_directory: "./workspace"
+    max_file_size: "10MB"
+    
+  data_analysis:
+    enabled: true
+    libraries: ["pandas", "numpy", "matplotlib", "seaborn"]
+    
+  math_solver:
+    enabled: true
+    providers: ["wolfram", "sympy"]
+
+# API Configuration
+api:
+  openai:
+    base_url: "https://api.openai.com/v1"
+    timeout: 120
+    max_retries: 3
+    
+  google:
+    base_url: "https://generativelanguage.googleapis.com/v1beta"
+    timeout: 120
+    max_retries: 3
+    
+  deepseek:
+    base_url: "https://api.deepseek.com/v1"
+    timeout: 120
+    max_retries: 3
+
+# Logging and Monitoring
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "multi_llm_agent.log"
+  max_size: "50MB"
+  backup_count: 5
+  
+  loggers:
+    - name: "multi_llm_agent.core"
+      level: "DEBUG"
+    - name: "multi_llm_agent.agents"
+      level: "INFO"
+    - name: "multi_llm_agent.models"
+      level: "INFO"
+    - name: "multi_llm_agent.metrics"
+      level: "INFO"
+
+# Storage
+storage:
+  type: "sqlite"  # sqlite, postgresql, redis
+  database_url: "sqlite:///multi_llm_agent.db"
+  
+  redis:
+    host: "localhost"
+    port: 6379
+    db: 0
+    
+  cache:
+    enabled: true
+    ttl: 3600  # seconds
+    max_size: 1000
+
+# Security
+security:
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 100
+    
+  api_key_rotation:
+    enabled: false
+    rotation_interval: 7  # days
+    
+  input_validation:
+    enabled: true
+    max_input_length: 50000
+    
+  output_filtering:
+    enabled: true
+    block_sensitive_data: true
