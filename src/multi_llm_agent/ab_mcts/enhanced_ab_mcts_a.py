@@ -9,27 +9,9 @@ from dataclasses import dataclass, field
 from logging import getLogger
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar, Union
 
-try:
-    import numpy as np
-except ImportError:
-    # Fallback if numpy not available
-    class FakeNumpy:
-        @staticmethod
-        def random_beta(alpha, beta_param):
-            # Simple approximation using random.random()
-            return random.random()
-        
-        @staticmethod
-        def argmax(arr):
-            return max(range(len(arr)), key=lambda i: arr[i])
-    
-    np = FakeNumpy()
-
-try:
-    from scipy.stats import beta, norm
-except ImportError:
-    # Scipy not available, we'll use simpler implementations
-    pass
+import numpy as np
+from scipy.stats import beta, norm, invgamma, gamma
+from scipy.special import gammaln
 
 from .base import Algorithm
 from .tree import Node, Tree
@@ -43,57 +25,131 @@ logger = getLogger(__name__)
 
 @dataclass
 class BayesianStats:
-    """Bayesian statistics for Thompson Sampling."""
+    """Advanced Bayesian statistics for Thompson Sampling with full scipy support."""
     alpha: float = 1.0  # Beta distribution parameter (successes + 1)
     beta_param: float = 1.0  # Beta distribution parameter (failures + 1)
     total_samples: int = 0
     sum_rewards: float = 0.0
     sum_squared_rewards: float = 0.0
     
+    # Gaussian-Inverse-Gamma parameters for Gaussian likelihood
+    mu_0: float = 0.5  # Prior mean
+    kappa_0: float = 1.0  # Prior precision (confidence in prior mean)
+    alpha_0: float = 1.0  # Shape parameter for precision
+    beta_0: float = 1.0  # Rate parameter for precision
+    
     def update(self, reward: float):
-        """Update statistics with a new reward."""
+        """Update statistics with a new reward using conjugate priors."""
         self.total_samples += 1
         self.sum_rewards += reward
         self.sum_squared_rewards += reward * reward
         
-        # Update Beta distribution parameters
-        # Treat reward as success probability
+        # Update Beta distribution parameters (for bounded [0,1] rewards)
         self.alpha += reward
         self.beta_param += (1.0 - reward)
+        
+        # Update Gaussian-Inverse-Gamma parameters (for general rewards)
+        n = self.total_samples
+        sample_mean = self.sum_rewards / n
+        
+        # Posterior parameters
+        kappa_n = self.kappa_0 + n
+        mu_n = (self.kappa_0 * self.mu_0 + n * sample_mean) / kappa_n
+        alpha_n = self.alpha_0 + n / 2
+        
+        if n > 1:
+            sample_var = (self.sum_squared_rewards - n * sample_mean**2) / (n - 1)
+            beta_n = self.beta_0 + 0.5 * ((n - 1) * sample_var + 
+                                         (self.kappa_0 * n / kappa_n) * (sample_mean - self.mu_0)**2)
+        else:
+            beta_n = self.beta_0
+        
+        # Store updated parameters
+        self.mu_0 = mu_n
+        self.kappa_0 = kappa_n
+        self.alpha_0 = alpha_n
+        self.beta_0 = beta_n
     
     def sample(self) -> float:
-        """Sample from the posterior distribution."""
+        """Sample from the posterior distribution using scipy."""
         if self.total_samples == 0:
-            return random.random()
+            return np.random.beta(1, 1)  # Uniform prior
         
-        # Use Beta distribution for bounded rewards [0,1]
-        try:
-            # Try numpy version if available
-            if hasattr(np, 'random') and hasattr(np.random, 'beta'):
-                return np.random.beta(self.alpha, self.beta_param)
-            else:
-                # Fallback to simple approximation
-                mean = self.alpha / (self.alpha + self.beta_param)
-                variance = (self.alpha * self.beta_param) / ((self.alpha + self.beta_param) ** 2 * (self.alpha + self.beta_param + 1))
-                # Add some noise around the mean
-                return max(0.0, min(1.0, mean + random.gauss(0, math.sqrt(variance))))
-        except:
-            # Final fallback
-            return self.mean + random.gauss(0, 0.1)
+        # For bounded [0,1] rewards, use Beta distribution
+        if self._is_bounded_reward():
+            return beta.rvs(self.alpha, self.beta_param)
+        else:
+            # For general rewards, use Gaussian with uncertain variance
+            # Sample precision from Gamma distribution
+            precision = gamma.rvs(self.alpha_0, scale=1/self.beta_0)
+            # Sample mean from Normal given precision
+            variance = 1 / (self.kappa_0 * precision)
+            return norm.rvs(loc=self.mu_0, scale=np.sqrt(variance))
+    
+    def _is_bounded_reward(self) -> bool:
+        """Check if all observed rewards are in [0,1] range."""
+        if self.total_samples == 0:
+            return True
+        mean = self.mean
+        return 0 <= mean <= 1 and self.sum_rewards <= self.total_samples
+    
+    def sample_multiple(self, n_samples: int = 1000) -> np.ndarray:
+        """Generate multiple samples for analysis."""
+        if self.total_samples == 0:
+            return np.random.beta(1, 1, size=n_samples)
+        
+        if self._is_bounded_reward():
+            return beta.rvs(self.alpha, self.beta_param, size=n_samples)
+        else:
+            # Sample from posterior predictive distribution
+            precisions = gamma.rvs(self.alpha_0, scale=1/self.beta_0, size=n_samples)
+            variances = 1 / (self.kappa_0 * precisions)
+            return norm.rvs(loc=self.mu_0, scale=np.sqrt(variances), size=n_samples)
     
     def confidence_interval(self, confidence: float = 0.95) -> Tuple[float, float]:
-        """Get confidence interval for the mean."""
-        if self.total_samples < 2:
+        """Get Bayesian credible interval using scipy."""
+        if self.total_samples == 0:
             return (0.0, 1.0)
         
-        mean = self.sum_rewards / self.total_samples
-        variance = (self.sum_squared_rewards / self.total_samples) - (mean ** 2)
-        std = math.sqrt(variance / self.total_samples)
+        alpha_level = (1 - confidence) / 2
         
-        z_score = 1.96 if confidence == 0.95 else 2.576  # 99% confidence
-        margin = z_score * std
+        if self._is_bounded_reward():
+            # Use Beta distribution quantiles
+            lower = beta.ppf(alpha_level, self.alpha, self.beta_param)
+            upper = beta.ppf(1 - alpha_level, self.alpha, self.beta_param)
+        else:
+            # Use Gaussian with uncertain variance (t-distribution)
+            # Approximate with many samples
+            samples = self.sample_multiple(10000)
+            lower = np.percentile(samples, alpha_level * 100)
+            upper = np.percentile(samples, (1 - alpha_level) * 100)
         
-        return (max(0.0, mean - margin), min(1.0, mean + margin))
+        return (float(lower), float(upper))
+    
+    def posterior_mean(self) -> float:
+        """Get the posterior mean."""
+        if self.total_samples == 0:
+            return 0.5
+        
+        if self._is_bounded_reward():
+            return self.alpha / (self.alpha + self.beta_param)
+        else:
+            return self.mu_0
+    
+    def posterior_variance(self) -> float:
+        """Get the posterior variance."""
+        if self.total_samples == 0:
+            return 1/12  # Uniform [0,1] variance
+        
+        if self._is_bounded_reward():
+            ab_sum = self.alpha + self.beta_param
+            return (self.alpha * self.beta_param) / (ab_sum**2 * (ab_sum + 1))
+        else:
+            # Expected variance from Inverse-Gamma
+            if self.alpha_0 > 1:
+                return self.beta_0 / ((self.alpha_0 - 1) * self.kappa_0)
+            else:
+                return float('inf')
     
     @property
     def mean(self) -> float:
@@ -189,13 +245,7 @@ class EnhancedNodeProbState:
             exploration_bonus = self._ucb_exploration_bonus(stats.total_samples)
             child_scores.append(thompson_score + exploration_bonus)
         
-        try:
-            if hasattr(np, 'argmax'):
-                return int(np.argmax(child_scores))
-            else:
-                return max(range(len(child_scores)), key=lambda i: child_scores[i])
-        except:
-            return max(range(len(child_scores)), key=lambda i: child_scores[i])
+        return int(np.argmax(child_scores))
     
     def _ucb_exploration_bonus(self, visits: int) -> float:
         """Calculate UCB exploration bonus."""
