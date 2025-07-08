@@ -68,6 +68,13 @@ web = [
     "nicegui>=1.4.0",
 ]
 
+abmcts-m = [
+    "jax>=0.5.2",
+    "numpyro>=0.17.0",
+    "pymc>=5.21.0",
+    "xarray>=2025.1.2",
+]
+
 [project.scripts]
 mla = "multi_llm_agent.cli:main"
 mla-server = "multi_llm_agent.server:run"
