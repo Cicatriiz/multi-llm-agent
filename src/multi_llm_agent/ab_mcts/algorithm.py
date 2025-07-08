@@ -5,7 +5,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from ..core.base import LLMAgent
+from ..core.base import Agent
 from .ab_mcts_a import ABMCTSA, ABMCTSAAlgoState
 from .ab_mcts_m import ABMCTSM, ABMCTSMState
 from .ranker import top_k
@@ -35,7 +35,7 @@ class ABMCTSAgent:
 
     def __init__(
         self,
-        agents: Dict[str, LLMAgent],
+        agents: Dict[str, Agent],
         algorithm: str = "ab_mcts_a",
         search_budget: int = 20,
         top_k_results: int = 1,
@@ -78,7 +78,7 @@ class ABMCTSAgent:
         generate_fns = {}
 
         for agent_name, agent in self.agents.items():
-            def make_generate_fn(agent_instance: LLMAgent, name: str):
+            def make_generate_fn(agent_instance: Agent, name: str):
                 def generate_fn(parent_state: Optional[LLMResponse] = None) -> Tuple[LLMResponse, float]:
                     """Generate a response from this agent."""
                     try:

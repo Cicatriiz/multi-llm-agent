@@ -70,7 +70,13 @@ class PyMCInterface:
         """
         Main entry point of PyMC Bayesian mixed model fitting.
         """
-        return "mock_action" if random.random() > 0.5 else 0  # Placeholder logic
+        # Simple fallback logic when PyMC is not available
+        if len(node.children) == 0 or random.random() > 0.6:
+            # Generate new node - return a valid action name
+            return random.choice(actions) if actions else "default_action"
+        else:
+            # Continue with existing child
+            return random.randint(0, len(node.children) - 1)
 
 class ABMCTSM(Algorithm[StateT, ABMCTSMState[StateT]]):
     """
